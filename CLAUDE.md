@@ -117,7 +117,7 @@ opencode/
 
 ### Key Patterns
 
-- **Namespaces**: Most modules use TypeScript `namespace` exports (e.g., `Session`, `Config`, `Agent`)
+- **Barrel self-exports**: Modules use `export * as X from "."` at the bottom of their index.ts to create namespace-like exports. Import via barrel path (e.g., `import { Config } from "@/config"`) not direct file path.
 - **Effect.js**: The project uses the Effect library for service composition, dependency injection, and error handling via `Context`, `Layer`, `Effect`
 - **Zod schemas**: Used extensively for validation and type definitions
 - **Conditional imports**: Platform-specific code via `#db`, `#pty`, `#hono` import maps (Bun vs Node.js)
@@ -160,6 +160,34 @@ Model metadata is fetched from `models.dev` and cached locally.
 - **Global config**: `~/.config/opencode/` (XDG base directories)
 - **Managed config** (enterprise): `/etc/opencode` (Linux), `/Library/Application Support/opencode` (macOS)
 - **Key settings**: provider selection, permission rules, MCP servers, tool toggles, plugin specs
+
+## LLM Profiling
+
+Profiling logs every LLM API call when enabled via environment variable:
+
+```bash
+OPENCODE_PROFILING=true bun dev
+```
+
+**Log location**: `~/.local/share/opencode/profiling/`
+
+Two files are generated per session:
+
+| File | Content |
+|------|---------|
+| `profile-<timestamp>.jsonl` | Compact summary: tokens (input/output), message roles, available/called tools, duration, model/provider info |
+| `profile-raw-<timestamp>.jsonl` | Full text: system prompts, user query, all input messages, output text/reasoning/tool calls |
+
+Both files share a `requestID` field for cross-referencing.
+
+**Implementation** (3 files):
+- `session/profiler.ts` — JSONL writer with `startRequest` / `appendText` / `appendReasoning` / `appendToolCall` / `endRequest`
+- `session/llm.ts` — captures request metadata before `streamText()`
+- `session/processor.ts` — captures output via stream events (`text-delta`, `reasoning-delta`, `tool-call`, `finish-step`)
+
+## `bun dev` vs Built Binary
+
+`bun dev` runs TypeScript source directly; `./packages/opencode/script/build.ts --single` produces a standalone native binary. Key difference: `generate.ts` creates `models-snapshot.js` (model catalog from models.dev), which is embedded in the binary but absent in dev mode. If network is unavailable, run `bun ./packages/opencode/script/generate.ts` first to create the snapshot for dev mode.
 
 ## Important Notes
 
