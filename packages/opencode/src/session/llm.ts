@@ -361,8 +361,8 @@ const live: Layer.Layer<
           "unknown",
         system,
         userQuery,
-        messageCount: messages.length,
-        tools: Object.keys(tools),
+        messages: messages as { role: string; content: unknown }[],
+        availableTools: Object.keys(tools),
       })
   
       return streamText({
