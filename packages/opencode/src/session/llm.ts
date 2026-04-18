@@ -442,7 +442,7 @@ const live: Layer.Layer<
           },
         },
       })
-    }
+    })
 
     const stream: Interface["stream"] = (input) =>
       Stream.scoped(
