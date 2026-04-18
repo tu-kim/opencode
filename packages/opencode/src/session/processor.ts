@@ -20,6 +20,7 @@ import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { Log } from "@/util"
 import { isRecord } from "@/util/record"
+import { Profiler } from "./profiler"
 
 const DOOM_LOOP_THRESHOLD = 3
 const log = Log.create({ service: "session.processor" })
@@ -281,8 +282,40 @@ export const layer: Layer.Layer<
           case "tool-input-delta":
             return
 
-          case "tool-input-end":
-            return
+            case "tool-call": {
+              if (ctx.assistantMessage.summary) {
+                throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
+              }
+              Profiler.appendToolCall(ctx.sessionID, value.toolName, value.input)
+              yield* updateToolCall(value.toolCallId, (match) => ({
+                ...match,
+                tool: value.toolName,
+                state: {
+                  ...match.state,
+                  status: "running",
+                  input: value.input,
+                  time: { start: Date.now() },
+                },
+                metadata: match.metadata?.providerExecuted
+                  ? { ...value.providerMetadata, providerExecuted: true }
+                  : value.providerMetadata,
+              }))
+
+              const parts = MessageV2.parts(ctx.assistantMessage.id)
+              const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+              if (
+                recentParts.length !== DOOM_LOOP_THRESHOLD ||
+                !recentParts.every(
+                  (part) =>
+                    part.type === "tool" &&
+                    part.tool === value.toolName &&
+                    part.state.status !== "pending" &&
+                    JSON.stringify(part.state.input) === JSON.stringify(value.input),
+                )
+              ) {
+                return
+              }
 
           case "tool-call": {
             if (ctx.assistantMessage.summary) {
@@ -388,10 +421,31 @@ export const layer: Layer.Layer<
               }
               ctx.snapshot = undefined
             }
-            yield* summary
-              .summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
+
+            case "text-start":
+              ctx.currentText = {
+                id: PartID.ascending(),
+                messageID: ctx.assistantMessage.id,
+                sessionID: ctx.assistantMessage.sessionID,
+                type: "text",
+                text: "",
+                time: { start: Date.now() },
+                metadata: value.providerMetadata,
+              }
+              yield* session.updatePart(ctx.currentText)
+              return
+
+            case "text-delta":
+              if (!ctx.currentText) return
+              ctx.currentText.text += value.text
+              if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+              Profiler.appendText(ctx.sessionID, value.text)
+              yield* session.updatePartDelta({
+                sessionID: ctx.currentText.sessionID,
+                messageID: ctx.currentText.messageID,
+                partID: ctx.currentText.id,
+                field: "text",
+                delta: value.text,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
             if (

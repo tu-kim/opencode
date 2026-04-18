@@ -20,6 +20,7 @@ import { Wildcard } from "@/util"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { Installation } from "@/installation"
+import { Profiler } from "./profiler"
 import { InstallationVersion } from "@/installation/version"
 import { EffectBridge } from "@/effect"
 import * as Option from "effect/Option"
@@ -330,10 +331,46 @@ const live: Layer.Layer<
           })
         : undefined
 
-      return streamText({
-        onError(error) {
-          l.error("stream error", {
-            error,
+    const userQuery = (() => {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]
+        if (msg.role !== "user") continue
+        if (typeof msg.content === "string") return msg.content
+        if (Array.isArray(msg.content)) {
+          const text = msg.content
+            .filter((p): p is { type: "text"; text: string } => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+          if (text) return text
+        }
+      }
+      return ""
+    })()
+
+    Profiler.startRequest({
+      sessionID: input.sessionID,
+      messageID: input.user.id,
+      agent: input.agent.name,
+      provider: provider.id,
+      modelID: input.model.id,
+      apiModelID: input.model.api.id,
+      endpoint:
+        (provider.options?.["baseURL"] as string) ??
+        (provider.options?.["endpoint"] as string) ??
+        input.model.api.url ??
+        "unknown",
+      system,
+      userQuery,
+      messageCount: messages.length,
+      tools: Object.keys(tools),
+    })
+
+    return streamText({
+      onError(error) {
+        l.error("stream error", {
+          error,
+        })
+      },
           })
         },
         async experimental_repairToolCall(failed) {
