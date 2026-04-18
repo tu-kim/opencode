@@ -258,7 +258,7 @@ export namespace SessionProcessor {
               delete ctx.reasoningMap[value.id]
               return
 
-            case "tool-input-start":
+            case "tool-input-start": {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
@@ -279,6 +279,7 @@ export namespace SessionProcessor {
                 sessionID: part.sessionID,
               }
               return
+            }
 
             case "tool-input-delta":
               return
