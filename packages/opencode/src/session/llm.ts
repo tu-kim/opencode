@@ -331,46 +331,44 @@ const live: Layer.Layer<
           })
         : undefined
 
-    const userQuery = (() => {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i]
-        if (msg.role !== "user") continue
-        if (typeof msg.content === "string") return msg.content
-        if (Array.isArray(msg.content)) {
-          const text = msg.content
-            .filter((p): p is { type: "text"; text: string } => p.type === "text")
-            .map((p) => p.text)
-            .join("\n")
-          if (text) return text
+      const userQuery = (() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i]
+          if (msg.role !== "user") continue
+          if (typeof msg.content === "string") return msg.content
+          if (Array.isArray(msg.content)) {
+            const text = msg.content
+              .filter((p): p is { type: "text"; text: string } => p.type === "text")
+              .map((p) => p.text)
+              .join("\n")
+            if (text) return text
+          }
         }
-      }
-      return ""
-    })()
-
-    Profiler.startRequest({
-      sessionID: input.sessionID,
-      messageID: input.user.id,
-      agent: input.agent.name,
-      provider: provider.id,
-      modelID: input.model.id,
-      apiModelID: input.model.api.id,
-      endpoint:
-        (provider.options?.["baseURL"] as string) ??
-        (provider.options?.["endpoint"] as string) ??
-        input.model.api.url ??
-        "unknown",
-      system,
-      userQuery,
-      messageCount: messages.length,
-      tools: Object.keys(tools),
-    })
-
-    return streamText({
-      onError(error) {
-        l.error("stream error", {
-          error,
-        })
-      },
+        return ""
+      })()
+  
+      Profiler.startRequest({
+        sessionID: input.sessionID,
+        messageID: input.user.id,
+        agent: input.agent.name,
+        provider: item.id,
+        modelID: input.model.id,
+        apiModelID: input.model.api.id,
+        endpoint:
+          (item.options?.["baseURL"] as string) ??
+          (item.options?.["endpoint"] as string) ??
+          input.model.api.url ??
+          "unknown",
+        system,
+        userQuery,
+        messages: messages as { role: string; content: unknown }[],
+        availableTools: Object.keys(tools),
+      })
+  
+      return streamText({
+        onError(error) {
+          l.error("stream error", {
+            error,
           })
         },
         async experimental_repairToolCall(failed) {
@@ -414,7 +412,7 @@ const live: Layer.Layer<
             : {
                 "x-session-affinity": input.sessionID,
                 ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : {}),
-                "User-Agent": `opencode/${InstallationVersion}`,
+                "User-Agent": `opencode/${Installation.VERSION}`,
               }),
           ...input.model.headers,
           ...headers,
@@ -438,8 +436,6 @@ const live: Layer.Layer<
         }),
         experimental_telemetry: {
           isEnabled: cfg.experimental?.openTelemetry,
-          functionId: "session.llm",
-          tracer: telemetryTracer,
           metadata: {
             userId: cfg.username ?? "unknown",
             sessionId: input.sessionID,

@@ -13,30 +13,34 @@ export namespace Profiler {
     modelID: string
     apiModelID: string
     endpoint: string
-    system: string[]
-    userQuery: string
-    messageCount: number
-    tools: string[]
+    messageRoles: string[]
+    availableTools: string[]
     startTime: number
     text: string
     reasoning: string
     toolCalls: { tool: string; input: unknown }[]
+    inputMessages: unknown[]
+    system: string[]
+    userQuery: string
   }
 
   const pending = new Map<string, RequestData>()
-  let stream: WriteStream | undefined
+  let summaryStream: WriteStream | undefined
+  let rawStream: WriteStream | undefined
+  let sessionTag = ""
 
   function enabled() {
     return Flag.OPENCODE_PROFILING
   }
 
-  function ensure() {
-    if (stream) return stream
+  function ensureStreams() {
+    if (summaryStream && rawStream) return { summary: summaryStream, raw: rawStream }
     const dir = path.join(Global.Path.data, "profiling")
     mkdirSync(dir, { recursive: true })
-    const file = path.join(dir, `profile-${new Date().toISOString().split(".")[0].replace(/:/g, "")}.jsonl`)
-    stream = createWriteStream(file, { flags: "a" })
-    return stream
+    if (!sessionTag) sessionTag = new Date().toISOString().split(".")[0].replace(/:/g, "")
+    summaryStream = createWriteStream(path.join(dir, `profile-${sessionTag}.jsonl`), { flags: "a" })
+    rawStream = createWriteStream(path.join(dir, `profile-raw-${sessionTag}.jsonl`), { flags: "a" })
+    return { summary: summaryStream, raw: rawStream }
   }
 
   export function startRequest(input: {
@@ -49,12 +53,15 @@ export namespace Profiler {
     endpoint: string
     system: string[]
     userQuery: string
-    messageCount: number
-    tools: string[]
+    messages: { role: string; content: unknown }[]
+    availableTools: string[]
   }) {
     if (!enabled()) return
     pending.set(input.sessionID, {
       ...input,
+      messageRoles: input.messages.map((m) => m.role),
+      inputMessages: input.messages,
+      availableTools: input.availableTools,
       timestamp: new Date().toISOString(),
       startTime: Date.now(),
       text: "",
@@ -97,32 +104,44 @@ export namespace Profiler {
     if (!req) return
     pending.delete(input.sessionID)
 
-    const record = {
+    const streams = ensureStreams()
+    const requestID = `${req.timestamp}-${req.messageID}`
+
+    const summary = {
       timestamp: req.timestamp,
+      requestID,
       sessionID: req.sessionID,
-      messageID: req.messageID,
       agent: req.agent,
       provider: req.provider,
       modelID: req.modelID,
       apiModelID: req.apiModelID,
       endpoint: req.endpoint,
-      system: req.system,
-      userQuery: req.userQuery,
-      messageCount: req.messageCount,
-      tools: req.tools,
+      messageRoles: req.messageRoles,
+      availableTools: req.availableTools,
+      calledTools: req.toolCalls.map((t) => t.tool),
       tokens: {
         input: input.tokens.input,
         output: input.tokens.output,
       },
       finishReason: input.finishReason,
+      durationMs: Date.now() - req.startTime,
+    }
+
+    const raw = {
+      requestID,
+      input: {
+        system: req.system,
+        userQuery: req.userQuery,
+        messages: req.inputMessages,
+      },
       output: {
         text: req.text,
         reasoning: req.reasoning,
         toolCalls: req.toolCalls,
       },
-      durationMs: Date.now() - req.startTime,
     }
 
-    ensure().write(JSON.stringify(record) + "\n")
+    streams.summary.write(JSON.stringify(summary) + "\n")
+    streams.raw.write(JSON.stringify(raw) + "\n")
   }
 }
