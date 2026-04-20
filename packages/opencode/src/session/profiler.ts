@@ -142,6 +142,6 @@ export namespace Profiler {
     }
 
     streams.summary.write(JSON.stringify(summary) + "\n")
-    streams.raw.write(JSON.stringify(raw) + "\n")
+    streams.raw.write(JSON.stringify(raw, null, 2) + "\n---\n")
   }
 }
