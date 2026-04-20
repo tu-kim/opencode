@@ -129,11 +129,7 @@ export namespace Profiler {
 
     const raw = {
       requestID,
-      input: {
-        system: req.system,
-        userQuery: req.userQuery,
-        messages: req.inputMessages,
-      },
+      input: req.inputMessages,
       output: {
         text: req.text,
         reasoning: req.reasoning,
