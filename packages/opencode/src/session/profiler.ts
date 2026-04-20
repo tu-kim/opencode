@@ -18,7 +18,9 @@ export namespace Profiler {
     startTime: number
     text: string
     reasoning: string
-    toolCalls: { tool: string; input: unknown }[]
+    toolCalls: { tool: string; input: unknown; durationMs?: number }[]
+    toolStartTimes: Map<string, number>
+    totalToolMs: number
     inputMessages: unknown[]
     system: string[]
     userQuery: string
@@ -67,6 +69,8 @@ export namespace Profiler {
       text: "",
       reasoning: "",
       toolCalls: [],
+      toolStartTimes: new Map(),
+      totalToolMs: 0,
     })
   }
 
@@ -82,10 +86,25 @@ export namespace Profiler {
     if (req) req.reasoning += delta
   }
 
-  export function appendToolCall(sessionID: string, tool: string, input: unknown) {
+  export function appendToolCall(sessionID: string, callID: string, tool: string, input: unknown) {
     if (!enabled()) return
     const req = pending.get(sessionID)
-    if (req) req.toolCalls.push({ tool, input })
+    if (!req) return
+    req.toolCalls.push({ tool, input })
+    req.toolStartTimes.set(callID, Date.now())
+  }
+
+  export function completeToolCall(sessionID: string, callID: string) {
+    if (!enabled()) return
+    const req = pending.get(sessionID)
+    if (!req) return
+    const start = req.toolStartTimes.get(callID)
+    if (start === undefined) return
+    const elapsed = Date.now() - start
+    req.totalToolMs += elapsed
+    req.toolStartTimes.delete(callID)
+    const last = req.toolCalls.findLast((t) => t.durationMs === undefined)
+    if (last) last.durationMs = elapsed
   }
 
   export function endRequest(input: {
@@ -106,6 +125,7 @@ export namespace Profiler {
 
     const streams = ensureStreams()
     const requestID = `${req.timestamp}-${req.messageID}`
+    const totalMs = Date.now() - req.startTime
 
     const summary = {
       timestamp: req.timestamp,
@@ -124,7 +144,11 @@ export namespace Profiler {
         output: input.tokens.output,
       },
       finishReason: input.finishReason,
-      durationMs: Date.now() - req.startTime,
+      durationMs: {
+        total: totalMs,
+        llm: totalMs - req.totalToolMs,
+        tools: req.totalToolMs,
+      },
     }
 
     const raw = {
