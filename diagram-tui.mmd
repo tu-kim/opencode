@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    participant UA as 👤 User A<br/>(Terminal)
+    participant UB as 👤 User B<br/>(Terminal)
+    participant PA as 📟 bun dev<br/>Process A
+    participant PB as 📟 bun dev<br/>Process B
+    participant LLM as ☁️ vLLM<br/>:8000/v1
+
+    rect rgb(245, 245, 255)
+        Note over UA,LLM: TUI 모드 — 유저당 별도 프로세스 (완전 격리)
+    end
+
+    UA->>PA: opencode (TUI 시작)
+    UB->>PB: opencode (TUI 시작)
+
+    Note over PA: 별도 프로세스 (PID 1001)<br/>별도 Instance<br/>별도 SQLite 연결<br/>별도 이벤트 루프<br/>directory: /home/A/project
+
+    Note over PB: 별도 프로세스 (PID 1002)<br/>별도 Instance<br/>별도 SQLite 연결<br/>별도 이벤트 루프<br/>directory: /home/B/project
+
+    UA->>PA: "auth 버그 수정해줘"
+    UB->>PB: "테스트 추가해줘"
+
+    par User A의 LLM 호출
+        PA->>LLM: POST /chat/completions<br/>(async fetch)
+        LLM-->>PA: SSE stream
+    and User B의 LLM 호출 (동시)
+        PB->>LLM: POST /chat/completions<br/>(async fetch)
+        LLM-->>PB: SSE stream
+    end
+
+    Note over PA: tool-call: bash "npm test"<br/>→ child_process.spawn (PID 2001)
+    Note over PB: tool-call: read "test.ts"<br/>→ async fs.readFile
+
+    par User A의 2번째 LLM 호출
+        PA->>LLM: POST /chat/completions
+        LLM-->>PA: SSE stream
+    and User B의 2번째 LLM 호출
+        PB->>LLM: POST /chat/completions
+        LLM-->>PB: SSE stream
+    end
+
+    PA-->>UA: 응답 (TUI에 렌더링)
+    PB-->>UB: 응답 (TUI에 렌더링)

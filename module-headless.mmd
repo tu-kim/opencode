@@ -1,0 +1,95 @@
+graph TB
+    subgraph Headless["Headless 모드 — 단일 프로세스, 모든 유저 공유"]
+        direction TB
+
+        UA["👤 User A<br/>(Web/SDK)"]
+        UB["👤 User B<br/>(Web/SDK)"]
+
+        subgraph Server["Bun 프로세스 (PID 1001) — port 4096"]
+            direction TB
+
+            subgraph Middleware["Hono 미들웨어 체인"]
+                MW_Auth["AuthMiddleware"]
+                MW_Log["LoggerMiddleware"]
+                MW_Inst["InstanceMiddleware"]
+                MW_WS["WorkspaceRouter"]
+                MW_Auth --> MW_Log --> MW_Inst --> MW_WS
+            end
+
+            subgraph Routes["API Routes"]
+                R_Session["POST /session/:id/message"]
+                R_Event["GET /events (SSE)"]
+                R_WS["POST /experimental/workspace"]
+            end
+
+            subgraph Core["코어 파이프라인 (공유)"]
+                Prompt["SessionPrompt<br/>runLoop (while true)"]
+                Proc["Processor<br/>이벤트 처리"]
+                LLM_Svc["LLM Service<br/>streamText()"]
+                Compact["Compaction<br/>컨텍스트 압축"]
+            end
+
+            subgraph Instances["Instance 캐시 (directory별)"]
+                I_A["Instance A<br/>dir: /worktree/abc"]
+                I_B["Instance B<br/>dir: /worktree/def"]
+            end
+
+            subgraph Tools["Tool Registry (공유)"]
+                T_Bash["bash<br/>→ child_process"]
+                T_Read["read<br/>→ async fs"]
+                T_Edit["edit<br/>→ async fs"]
+                T_Write["write<br/>→ async fs"]
+                T_Glob["glob / grep"]
+            end
+
+            subgraph Shared["공유 자원"]
+                DB[(SQLite DB<br/>opencode.db)]
+                Bus["Event Bus<br/>(SSE 브로드캐스트)"]
+                Cache["Provider SDK<br/>캐시"]
+            end
+
+            MW_WS -->|"workspace=ws-A"| I_A
+            MW_WS -->|"workspace=ws-B"| I_B
+            MW_WS -->|"workspace 없음"| Routes
+
+            I_A --> Routes
+            I_B --> Routes
+
+            R_Session --> Prompt
+            Prompt --> Proc
+            Proc --> LLM_Svc
+            LLM_Svc --> Cache
+            Prompt --> Tools
+            Prompt --> Compact
+            Proc --> DB
+            Proc --> Bus
+            Bus --> R_Event
+        end
+    end
+
+    UA -->|"HTTP"| MW_Auth
+    UB -->|"HTTP"| MW_Auth
+
+    subgraph FS["파일시스템"]
+        FS_A["/worktree/abc"]
+        FS_B["/worktree/def"]
+    end
+
+    I_A -.->|"격리됨"| FS_A
+    I_B -.->|"격리됨"| FS_B
+    T_Bash --> FS_A
+    T_Bash --> FS_B
+
+    Cache -->|"POST /chat/completions"| vLLM
+    vLLM["☁️ vLLM :8000/v1"]
+
+    style Headless fill:#fff5f5,stroke:#aaa
+    style Server fill:#fff,stroke:#ccc
+    style Middleware fill:#e8f4fd,stroke:#7ab8e0
+    style Routes fill:#f0f0f0,stroke:#999
+    style Core fill:#fff8e1,stroke:#e6a817
+    style Instances fill:#e8f5e9,stroke:#66bb6a
+    style Tools fill:#fce4ec,stroke:#e57373
+    style Shared fill:#f3e5f5,stroke:#ab47bc
+    style FS fill:#e0e0e0,stroke:#999
+    style vLLM fill:#fff3cd,stroke:#e6a817

@@ -291,7 +291,7 @@ export namespace SessionProcessor {
               if (ctx.assistantMessage.summary) {
                 throw new Error(`Tool call not allowed while generating summary: ${value.toolName}`)
               }
-              Profiler.appendToolCall(ctx.sessionID, value.toolName, value.input)
+              Profiler.appendToolCall(ctx.sessionID, value.toolCallId, value.toolName, value.input)
               yield* updateToolCall(value.toolCallId, (match) => ({
                 ...match,
                 tool: value.toolName,
@@ -335,11 +335,13 @@ export namespace SessionProcessor {
             }
 
             case "tool-result": {
+              Profiler.completeToolCall(ctx.sessionID, value.toolCallId)
               yield* completeToolCall(value.toolCallId, value.output)
               return
             }
 
             case "tool-error": {
+              Profiler.completeToolCall(ctx.sessionID, value.toolCallId)
               yield* failToolCall(value.toolCallId, value.error)
               return
             }

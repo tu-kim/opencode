@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    participant UA as 👤 User A<br/>(Web/SDK)
+    participant UB as 👤 User B<br/>(Web/SDK)
+    participant SRV as 🌐 bun dev serve<br/>단일 프로세스 (PID 1001)<br/>port 4096
+    participant LLM as ☁️ vLLM<br/>:8000/v1
+
+    rect rgb(255, 245, 245)
+        Note over UA,LLM: Headless 모드 — 모든 유저가 같은 프로세스 (공유)
+    end
+
+    Note over SRV: 단일 이벤트 루프<br/>단일 SQLite 연결<br/>단일 메모리 공간<br/>Instance 캐시 공유<br/>Provider SDK 캐시 공유
+
+    UA->>SRV: POST /session/aaa/message<br/>"auth 버그 수정해줘"
+    UB->>SRV: POST /session/bbb/message<br/>"테스트 추가해줘"
+
+    Note over SRV: 두 요청 모두 같은 이벤트 루프에서<br/>async/await로 인터리빙 처리
+
+    par Session A의 LLM 호출
+        SRV->>LLM: POST /chat/completions (session A)
+        LLM-->>SRV: SSE stream
+    and Session B의 LLM 호출 (동시)
+        SRV->>LLM: POST /chat/completions (session B)
+        LLM-->>SRV: SSE stream
+    end
+
+    Note over SRV: Session A: bash "npm test" → PID 2001<br/>Session B: read "test.ts" → async fs.readFile<br/><br/>⚠️ Workspace 없으면 같은 디렉토리에서 실행!
+
+    par Session A의 2번째 LLM 호출
+        SRV->>LLM: POST /chat/completions
+        LLM-->>SRV: SSE stream
+    and Session B의 2번째 LLM 호출
+        SRV->>LLM: POST /chat/completions
+        LLM-->>SRV: SSE stream
+    end
+
+    SRV-->>UA: SSE event stream (실시간)
+    SRV-->>UB: SSE event stream (실시간)

@@ -1,0 +1,69 @@
+graph TB
+    subgraph TUI["TUI 모드 — 유저당 별도 프로세스"]
+        direction TB
+
+        subgraph UserA_Process["Process A (PID 1001) — User A"]
+            direction TB
+            UA_TUI["Terminal TUI<br/>OpenTUI + Solid.js"]
+            UA_Worker["Worker Thread<br/>(서버)"]
+            UA_Hono["Hono App"]
+            UA_Instance["Instance<br/>dir: /home/A/project"]
+            UA_Session["Session Service"]
+            UA_Prompt["SessionPrompt<br/>runLoop"]
+            UA_Proc["Processor"]
+            UA_LLM["LLM Service"]
+            UA_Provider["Provider SDK"]
+            UA_Tools["Tool Registry<br/>bash, read, edit, ..."]
+            UA_DB[(SQLite<br/>opencode.db)]
+            UA_FS[("/home/A/project<br/>파일시스템")]
+
+            UA_TUI -->|"in-process fetch"| UA_Worker
+            UA_Worker --> UA_Hono
+            UA_Hono --> UA_Instance
+            UA_Instance --> UA_Session
+            UA_Session --> UA_Prompt
+            UA_Prompt --> UA_Proc
+            UA_Proc --> UA_LLM
+            UA_LLM --> UA_Provider
+            UA_Prompt --> UA_Tools
+            UA_Session --> UA_DB
+            UA_Tools --> UA_FS
+        end
+
+        subgraph UserB_Process["Process B (PID 1002) — User B"]
+            direction TB
+            UB_TUI["Terminal TUI<br/>OpenTUI + Solid.js"]
+            UB_Worker["Worker Thread<br/>(서버)"]
+            UB_Hono["Hono App"]
+            UB_Instance["Instance<br/>dir: /home/B/project"]
+            UB_Session["Session Service"]
+            UB_Prompt["SessionPrompt<br/>runLoop"]
+            UB_Proc["Processor"]
+            UB_LLM["LLM Service"]
+            UB_Provider["Provider SDK"]
+            UB_Tools["Tool Registry<br/>bash, read, edit, ..."]
+            UB_DB[(SQLite<br/>opencode.db)]
+            UB_FS[("/home/B/project<br/>파일시스템")]
+
+            UB_TUI -->|"in-process fetch"| UB_Worker
+            UB_Worker --> UB_Hono
+            UB_Hono --> UB_Instance
+            UB_Instance --> UB_Session
+            UB_Session --> UB_Prompt
+            UB_Prompt --> UB_Proc
+            UB_Proc --> UB_LLM
+            UB_LLM --> UB_Provider
+            UB_Prompt --> UB_Tools
+            UB_Session --> UB_DB
+            UB_Tools --> UB_FS
+        end
+    end
+
+    UA_Provider -->|"POST /chat/completions"| vLLM
+    UB_Provider -->|"POST /chat/completions"| vLLM
+    vLLM["☁️ vLLM :8000/v1"]
+
+    style TUI fill:#f5f5ff,stroke:#aaa
+    style UserA_Process fill:#eef,stroke:#88a
+    style UserB_Process fill:#efe,stroke:#8a8
+    style vLLM fill:#fff3cd,stroke:#e6a817
