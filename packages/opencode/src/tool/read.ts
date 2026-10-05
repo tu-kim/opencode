@@ -5,6 +5,8 @@ import * as Tool from "./tool"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { LSP } from "@/lsp/lsp"
 import DESCRIPTION from "./read.txt"
+import DESCRIPTION_FULL from "./read-full.txt"
+import { truthy } from "@opencode-ai/core/flag/flag"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
@@ -17,6 +19,11 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+
+// ComposableKV: when set, a file read ignores `offset`/`limit` and every size cap and
+// returns the whole file, so the output for a given file content is always the same text.
+// Read per call (not via Flag) so it can be toggled without reloading the module.
+const fullRead = () => truthy("OPENCODE_CKV_FULL_READ")
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -134,7 +141,7 @@ export const ReadTool = Tool.define<
       )
     })
 
-    const lines = Effect.fn("ReadTool.lines")(function* (filepath: string, opts: { limit: number; offset: number }) {
+    const lines = Effect.fn("ReadTool.lines")(function* (filepath: string, opts: { limit: number; offset: number; full?: boolean }) {
       const start = opts.offset - 1
       const raw: string[] = []
       const flags = { bytes: 0, count: 0, cut: false, more: false, done: false }
@@ -156,6 +163,11 @@ export const ReadTool = Tool.define<
 
             if (raw.length >= opts.limit) {
               flags.more = true
+              return
+            }
+
+            if (opts.full) {
+              raw.push(text)
               return
             }
 
@@ -328,7 +340,12 @@ export const ReadTool = Tool.define<
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
-      const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 })
+      const file = yield* lines(
+        filepath,
+        fullRead()
+          ? { limit: Infinity, offset: 1, full: true }
+          : { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 },
+      )
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),
@@ -377,7 +394,7 @@ export const ReadTool = Tool.define<
     })
 
     return {
-      description: DESCRIPTION,
+      description: fullRead() ? DESCRIPTION_FULL : DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context<Metadata>) =>
         run(params, ctx).pipe(Effect.orDie),

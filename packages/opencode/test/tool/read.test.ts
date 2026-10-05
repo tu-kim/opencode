@@ -606,3 +606,79 @@ describe("tool.read binary detection", () => {
     }),
   )
 })
+
+describe("tool.read ckv full read", () => {
+  const withFullRead = <A, E, R>(value: string | undefined, self: Effect.Effect<A, E, R>) =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env.OPENCODE_CKV_FULL_READ
+        if (value === undefined) delete process.env.OPENCODE_CKV_FULL_READ
+        else process.env.OPENCODE_CKV_FULL_READ = value
+        return previous
+      }),
+      () => self,
+      (previous) =>
+        Effect.sync(() => {
+          if (previous) process.env.OPENCODE_CKV_FULL_READ = previous
+          else delete process.env.OPENCODE_CKV_FULL_READ
+        }),
+    )
+
+  it.live("ignores offset and limit", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "offset.txt")
+      yield* put(filepath, Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n"))
+
+      const sliced = yield* withFullRead("1", exec(dir, { filePath: filepath, offset: 10, limit: 5 }))
+      const whole = yield* withFullRead("1", exec(dir, { filePath: filepath }))
+      expect(sliced.output).toBe(whole.output)
+      expect(sliced.output).toContain("1: line1\n")
+      expect(sliced.output).toContain("20: line20")
+      expect(sliced.output).toContain("(End of file - total 20 lines)")
+      expect(sliced.metadata.truncated).toBe(false)
+    }),
+  )
+
+  it.live("returns files beyond the line, byte and line-length caps", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "big.txt")
+      const long = "y".repeat(5000)
+      const body = Array.from({ length: 3000 }, (_, i) => `row${i + 1} ${"x".repeat(40)}`)
+      body.push(long)
+      yield* put(filepath, body.join("\n"))
+
+      const result = yield* withFullRead("true", exec(dir, { filePath: filepath }))
+      expect(Buffer.byteLength(result.output)).toBeGreaterThan(100 * 1024)
+      expect(result.output).toContain(`3000: row3000 ${"x".repeat(40)}\n`)
+      expect(result.output).toContain(`3001: ${long}\n`)
+      expect(result.output).not.toContain("line truncated")
+      expect(result.output).not.toContain("Use offset=")
+      expect(result.output).toContain("(End of file - total 3001 lines)")
+      expect(result.metadata.truncated).toBe(false)
+    }),
+  )
+
+  it.live("keeps the original behavior when the flag is off", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "offset.txt")
+      yield* put(filepath, Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n"))
+
+      const result = yield* withFullRead(undefined, exec(dir, { filePath: filepath, offset: 10, limit: 5 }))
+      expect(result.output).toContain("10: line10")
+      expect(result.output).not.toContain("15: line15")
+      expect(result.metadata.truncated).toBe(true)
+    }),
+  )
+
+  it.live("switches the tool description", () =>
+    Effect.gen(function* () {
+      const on = yield* withFullRead("1", init())
+      const off = yield* withFullRead(undefined, init())
+      expect(on.description).toContain("always returns the entire file")
+      expect(off.description).toContain("up to 2000 lines")
+    }),
+  )
+})
