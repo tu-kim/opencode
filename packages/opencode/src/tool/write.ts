@@ -8,6 +8,7 @@ import DESCRIPTION from "./write.txt"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import * as CkvNotify from "@/ckv/notify"
 import { Format } from "../format"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
@@ -66,6 +67,7 @@ export const WriteTool = Tool.define(
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
+          CkvNotify.notifyFileChangedAsync(filepath)
           yield* events.publish(Watcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",

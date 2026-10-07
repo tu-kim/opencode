@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import * as Tool from "./tool"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import * as CkvNotify from "@/ckv/notify"
 import { InstanceState } from "@/effect/instance-state"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -254,6 +255,7 @@ export const ApplyPatchTool = Tool.define(
             yield* Bom.syncFile(afs, edited, change.bom)
           }
           yield* events.publish(FileSystem.Event.Edited, { file: edited })
+          CkvNotify.notifyFileChangedAsync(edited)
         }
       }
 

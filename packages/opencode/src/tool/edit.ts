@@ -11,6 +11,7 @@ import { createTwoFilesPatch, diffLines } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import * as CkvNotify from "@/ckv/notify"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
@@ -113,6 +114,7 @@ export const EditTool = Tool.define(
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
                 }
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+                CkvNotify.notifyFileChangedAsync(filePath)
                 yield* events.publish(Watcher.Event.Updated, {
                   file: filePath,
                   event: "add",
@@ -157,6 +159,7 @@ export const EditTool = Tool.define(
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
               }
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
+              CkvNotify.notifyFileChangedAsync(filePath)
               yield* events.publish(Watcher.Event.Updated, {
                 file: filePath,
                 event: "change",
