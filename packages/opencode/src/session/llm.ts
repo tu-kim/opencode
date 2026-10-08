@@ -28,6 +28,7 @@ import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
+import * as CkvMeta from "@/ckv/meta"
 import { LLMRequestPrep } from "./llm/request"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -111,6 +112,12 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      // ComposableKV O-META: openai-compatible copies unknown option keys to
+      // the request body, so `nvext` lands next to `messages`.
+      if (input.model.api.npm === "@ai-sdk/openai-compatible") {
+        const nvext = CkvMeta.nvext(prepared.messages)
+        if (nvext) prepared.params.options.nvext = nvext
+      }
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
