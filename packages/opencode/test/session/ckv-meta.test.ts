@@ -110,6 +110,22 @@ describe("ckv.meta", () => {
     expect(CkvMeta.pathOf("<path>rel.py</path>\n<type>file</type>\n")).toBeUndefined()
   })
 
+  test("files() drops re-reads of the same path with OPENCODE_CKV_FIRST_READ_ONLY", () => {
+    const msgs = conversation()
+    msgs.push(
+      { role: "assistant", content: [{ type: "tool-call", toolCallId: "call_a2", toolName: "read", input: { filePath: "/repo/a.py" } }] },
+      { role: "tool", content: [{ type: "tool-result", toolCallId: "call_a2", toolName: "read", output: { type: "text", value: readResult("call_a2", "/repo/a.py", "1: x = 1") } }] },
+    )
+    expect(CkvMeta.files(msgs, false).map((f) => f.tool_call_id)).toEqual(["call_a", "call_b", "call_a2"])
+    expect(CkvMeta.files(msgs, true).map((f) => f.tool_call_id)).toEqual(["call_a", "call_b"])
+    process.env.OPENCODE_CKV_FIRST_READ_ONLY = "1"
+    try {
+      expect(CkvMeta.files(msgs).map((f) => f.tool_call_id)).toEqual(["call_a", "call_b"])
+    } finally {
+      delete process.env.OPENCODE_CKV_FIRST_READ_ONLY
+    }
+  })
+
   for (const on of [true, false]) {
     it.instance(
       `request body ${on ? "carries" : "omits"} nvext.ckv.files (T6-0, OPENCODE_CKV_META=${on ? 1 : 0})`,
