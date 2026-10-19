@@ -13,6 +13,7 @@ describe("provider error classification", () => {
       "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
       "Too many tokens",
       "Token limit exceeded",
+      "Bad Request: This model configuration accepts at most 131072 combined input and output tokens. However, your request has 126702 input tokens and asks for 8192 output tokens (134894 tokens total). Please reduce the input length or requested output length.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)

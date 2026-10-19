@@ -29,6 +29,8 @@ const patterns = [
   /model_context_window_exceeded/i,
   /too many tokens/i,
   /token limit exceeded/i,
+  // vLLM / Dynamo: "accepts at most 131072 combined input and output tokens. However, your request has ..."
+  /accepts at most [\d,]+ combined input and output tokens/i,
 ]
 
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
