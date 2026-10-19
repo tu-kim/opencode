@@ -16930,6 +16930,9 @@
           "snapshot": {
             "type": "string"
           },
+          "response_id": {
+            "type": "string"
+          },
           "cost": {
             "type": "number"
           },

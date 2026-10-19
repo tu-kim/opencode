@@ -319,6 +319,7 @@ export type StepFinishPart = {
   type: "step-finish"
   reason: string
   snapshot?: string
+  response_id?: string
   cost: number
   tokens: {
     input: number

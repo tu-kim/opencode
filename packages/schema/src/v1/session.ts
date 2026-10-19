@@ -242,6 +242,9 @@ export const StepFinishPart = Schema.Struct({
   type: Schema.Literal("step-finish"),
   reason: Schema.String,
   snapshot: Schema.optional(Schema.String),
+  // Provider response id (Dynamo: "chatcmpl-<rid>"); the only key that joins a
+  // session turn to the server-side request records (ComposableKV O-TRACE).
+  response_id: Schema.optional(Schema.String),
   cost: Schema.Finite,
   tokens: Schema.Struct({
     total: Schema.optional(Schema.Finite),

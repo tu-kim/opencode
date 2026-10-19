@@ -516,7 +516,14 @@ describe("OpenAI Chat route", () => {
         { type: "text-delta", id: "text-0", text: "Hello" },
         { type: "text-delta", id: "text-0", text: "!" },
         { type: "text-end", id: "text-0" },
-        { type: "step-finish", index: 0, reason: "stop", usage, providerMetadata: undefined },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: "stop",
+          usage,
+          providerMetadata: undefined,
+          response: { id: "chatcmpl_fixture" },
+        },
         {
           type: "finish",
           reason: "stop",
@@ -582,7 +589,14 @@ describe("OpenAI Chat route", () => {
           providerExecuted: undefined,
           providerMetadata: undefined,
         },
-        { type: "step-finish", index: 0, reason: "tool-calls", usage: undefined, providerMetadata: undefined },
+        {
+          type: "step-finish",
+          index: 0,
+          reason: "tool-calls",
+          usage: undefined,
+          providerMetadata: undefined,
+          response: { id: "chatcmpl_fixture" },
+        },
         { type: "finish", reason: "tool-calls", usage: undefined },
       ])
     }),

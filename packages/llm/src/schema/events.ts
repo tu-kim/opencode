@@ -186,6 +186,9 @@ export const StepFinish = Schema.Struct({
   reason: FinishReason,
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
+  // Provider-assigned response id for this step (OpenAI chat: the chunk `id`).
+  // Absent when the wire format carries none.
+  response: Schema.optional(Schema.Struct({ id: Schema.String })),
 }).annotate({ identifier: "LLM.Event.StepFinish" })
 export type StepFinish = Schema.Schema.Type<typeof StepFinish>
 

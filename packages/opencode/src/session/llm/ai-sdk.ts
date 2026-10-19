@@ -101,12 +101,19 @@ export function toLLMEvents(
                 },
               }
         state.copilotTotalNanoAiu = undefined
+        // response.id is the FIRST chunk's provider id when present (Dynamo/vLLM:
+        // "chatcmpl-<rid>"); when the provider sends none, ai-sdk substitutes its
+        // own generated "aitxt-..." id. The processor stores it on the step-finish
+        // part; consumers must check the "chatcmpl-" prefix before treating it as a
+        // server request id.
+        const responseID = event.response?.id
         return [
           LLMEvent.stepFinish({
             index: state.step++,
             reason: finishReason(event.finishReason),
             usage: usage(event.usage),
             providerMetadata: metadata,
+            response: responseID ? { id: responseID } : undefined,
           }),
         ]
       })
