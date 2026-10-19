@@ -21,8 +21,12 @@ export function enabled(): boolean {
   return truthy("OPENCODE_CKV_META")
 }
 
+// Default on (2026-10-19): only a path's first read goes to PI; later re-reads of the same path are prefilled
+// normally (re-reads that return the same PI chunk repeat the same edit error, docs/TURN_ANALYSIS.md §7).
+// OPENCODE_CKV_FIRST_READ_ONLY=0 restores "every read" (the K512b condition).
 export function firstReadOnly(): boolean {
-  return truthy("OPENCODE_CKV_FIRST_READ_ONLY")
+  const v = process.env["OPENCODE_CKV_FIRST_READ_ONLY"]?.toLowerCase()
+  return !(v === "0" || v === "false")
 }
 
 const HEADER = /^<path>([^\n]*)<\/path>\n<type>file<\/type>\n/
