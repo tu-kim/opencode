@@ -24,6 +24,15 @@ const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "
 // returns the whole file, so the output for a given file content is always the same text.
 // Read per call (not via Flag) so it can be toggled without reloading the module.
 const fullRead = () => truthy("OPENCODE_CKV_FULL_READ")
+// ComposableKV: a whole-file read above this size falls back to the default windowed read
+// (offset/limit, 50 KB cap). One 170 KB source file is ~55k tokens, and a single read that
+// large on top of a context just under the compaction threshold overran the model's
+// 131k window (ContextOverflowError). Such files get no PI-KV either way.
+const FULL_READ_MAX_BYTES_DEFAULT = 120 * 1024
+const fullReadMaxBytes = () => {
+  const v = Number(process.env["OPENCODE_CKV_FULL_READ_MAX_BYTES"])
+  return Number.isFinite(v) && v > 0 ? v : FULL_READ_MAX_BYTES_DEFAULT
+}
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -342,7 +351,7 @@ export const ReadTool = Tool.define<
 
       const file = yield* lines(
         filepath,
-        fullRead()
+        fullRead() && Number(stat.size) <= fullReadMaxBytes()
           ? { limit: Infinity, offset: 1, full: true }
           : { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 },
       )

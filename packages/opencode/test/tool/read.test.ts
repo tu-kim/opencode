@@ -608,19 +608,23 @@ describe("tool.read binary detection", () => {
 })
 
 describe("tool.read ckv full read", () => {
-  const withFullRead = <A, E, R>(value: string | undefined, self: Effect.Effect<A, E, R>) =>
+  const withFullRead = <A, E, R>(value: string | undefined, self: Effect.Effect<A, E, R>, maxBytes?: string) =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
-        const previous = process.env.OPENCODE_CKV_FULL_READ
+        const previous = [process.env.OPENCODE_CKV_FULL_READ, process.env.OPENCODE_CKV_FULL_READ_MAX_BYTES]
         if (value === undefined) delete process.env.OPENCODE_CKV_FULL_READ
         else process.env.OPENCODE_CKV_FULL_READ = value
+        if (maxBytes === undefined) delete process.env.OPENCODE_CKV_FULL_READ_MAX_BYTES
+        else process.env.OPENCODE_CKV_FULL_READ_MAX_BYTES = maxBytes
         return previous
       }),
       () => self,
-      (previous) =>
+      ([flag, max]) =>
         Effect.sync(() => {
-          if (previous) process.env.OPENCODE_CKV_FULL_READ = previous
+          if (flag) process.env.OPENCODE_CKV_FULL_READ = flag
           else delete process.env.OPENCODE_CKV_FULL_READ
+          if (max) process.env.OPENCODE_CKV_FULL_READ_MAX_BYTES = max
+          else delete process.env.OPENCODE_CKV_FULL_READ_MAX_BYTES
         }),
     )
 
@@ -649,7 +653,7 @@ describe("tool.read ckv full read", () => {
       body.push(long)
       yield* put(filepath, body.join("\n"))
 
-      const result = yield* withFullRead("true", exec(dir, { filePath: filepath }))
+      const result = yield* withFullRead("true", exec(dir, { filePath: filepath }), String(1024 * 1024))
       expect(Buffer.byteLength(result.output)).toBeGreaterThan(100 * 1024)
       expect(result.output).toContain(`3000: row3000 ${"x".repeat(40)}\n`)
       expect(result.output).toContain(`3001: ${long}\n`)
@@ -657,6 +661,26 @@ describe("tool.read ckv full read", () => {
       expect(result.output).not.toContain("Use offset=")
       expect(result.output).toContain("(End of file - total 3001 lines)")
       expect(result.metadata.truncated).toBe(false)
+    }),
+  )
+
+  it.live("falls back to the windowed read above the size cap", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const filepath = path.join(dir, "huge.txt")
+      yield* put(filepath, Array.from({ length: 3000 }, (_, i) => `row${i + 1} ${"x".repeat(40)}`).join("\n"))
+
+      // default cap (120 KB): a ~137 KB file is windowed like the stock tool
+      const capped = yield* withFullRead("1", exec(dir, { filePath: filepath, offset: 10, limit: 5 }))
+      expect(capped.output).toContain("10: row10")
+      expect(capped.output).not.toContain("15: row15")
+      expect(capped.metadata.truncated).toBe(true)
+
+      // a smaller file is still returned whole, and the cap is configurable
+      const small = yield* withFullRead("1", exec(dir, { filePath: filepath, offset: 10, limit: 5 }), String(1024 * 1024))
+      expect(small.output).toContain("\n1: row1 ")
+      expect(small.output).toContain("3000: row3000")
+      expect(small.metadata.truncated).toBe(false)
     }),
   )
 
@@ -677,7 +701,7 @@ describe("tool.read ckv full read", () => {
     Effect.gen(function* () {
       const on = yield* withFullRead("1", init())
       const off = yield* withFullRead(undefined, init())
-      expect(on.description).toContain("always returns the entire file")
+      expect(on.description).toContain("returns the entire file")
       expect(off.description).toContain("up to 2000 lines")
     }),
   )
